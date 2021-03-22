@@ -22,13 +22,12 @@ import com.anychart.core.Chart
 import java.lang.StringBuilder
 
 open class AnyChartView: FrameLayout {
-	var jsListener: JsListener? = null
-	var onRenderedListener: OnRenderedListener? = null
 	private var webView: WebView? = null
 	private var chart: Chart? = null
 	private var isRestored = false
 	private var isRendered = false
 	private var isDebug = false
+	private val onRenderedListeners = mutableListOf<OnRenderedListener>()
 	private val scripts = StringBuilder()
 	private val fonts = StringBuilder()
 	protected var js = StringBuilder()
@@ -36,12 +35,21 @@ open class AnyChartView: FrameLayout {
 	private var progressBar: View? = null
 	private var backgroundColor: String? = null
 	
+	var jsListener: JsListener? = null
+	
 	interface JsListener {
 		fun onJsLineAdd(jsLine: String)
 	}
 	
 	interface OnRenderedListener {
 		fun onRendered()
+		
+		companion object {
+			operator fun invoke(block: () -> Unit) =
+				object: OnRenderedListener {
+					override fun onRendered() = block()
+				}
+		}
 	}
 	
 	constructor(context: Context?): super(context!!) {
@@ -67,15 +75,16 @@ open class AnyChartView: FrameLayout {
 		return bundle
 	}
 	
+	@Suppress("LocalVariableName")
 	public override fun onRestoreInstanceState(state: Parcelable) {
-		var state: Parcelable? = state
-		if (state is Bundle) {
-			val bundle = state
+		var _state: Parcelable? = state
+		if (_state is Bundle) {
+			val bundle = _state
 			js.append(bundle.getString("js"))
-			state = bundle.getParcelable("superState")
+			_state = bundle.getParcelable("superState")
 		}
 		isRestored = true
-		super.onRestoreInstanceState(state)
+		super.onRestoreInstanceState(_state)
 	}
 	
 	@SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
@@ -138,7 +147,7 @@ open class AnyChartView: FrameLayout {
 					anychart.licenseKey("$licenceKey");
 					anychart.onDocumentReady(function() { $resultJs });
 				""") {
-					if (onRenderedListener != null) onRenderedListener!!.onRendered()
+					onRenderedListeners.forEach { listener -> listener.onRendered() }
 					if (progressBar != null) progressBar!!.visibility = GONE
 				}
 				isRestored = false
@@ -230,4 +239,12 @@ open class AnyChartView: FrameLayout {
 	fun setDebug(value: Boolean) {
 		isDebug = value
 	}
+	
+	fun addOnRenderedListener(listener: OnRenderedListener) {
+		onRenderedListeners.add(listener)
+	}
+	
+	@Suppress("LocalVariableName")
+	fun addOnRenderedListener(listener: () -> Unit) =
+		addOnRenderedListener(OnRenderedListener(listener))
 }
